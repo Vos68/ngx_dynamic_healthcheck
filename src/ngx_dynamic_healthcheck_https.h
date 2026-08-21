@@ -22,6 +22,27 @@ template <class PeersT, class PeerT> class ngx_dynamic_healthcheck_https :
     ngx_ssl_t    ssl;
     ngx_flag_t   ssl_ready;
 
+    static ngx_uint_t
+    default_protocols()
+    {
+        ngx_uint_t  protocols = 0;
+
+#ifdef NGX_SSL_TLSv1
+        protocols |= NGX_SSL_TLSv1;
+#endif
+#ifdef NGX_SSL_TLSv1_1
+        protocols |= NGX_SSL_TLSv1_1;
+#endif
+#ifdef NGX_SSL_TLSv1_2
+        protocols |= NGX_SSL_TLSv1_2;
+#endif
+#ifdef NGX_SSL_TLSv1_3
+        protocols |= NGX_SSL_TLSv1_3;
+#endif
+
+        return protocols;
+    }
+
     static void
     handshake_handler(ngx_connection_t *c)
     {
@@ -81,7 +102,7 @@ public:
         ngx_memzero(&ssl, sizeof(ngx_ssl_t));
         ssl.log = ngx_cycle->log;
 
-        if (ngx_ssl_create(&ssl, 0, NULL) == NGX_OK)
+        if (ngx_ssl_create(&ssl, default_protocols(), NULL) == NGX_OK)
             ssl_ready = 1;
 #endif
     }
