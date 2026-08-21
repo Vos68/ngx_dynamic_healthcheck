@@ -12,22 +12,6 @@
 extern "C" {
 #include <ngx_event_openssl.h>
 }
-
-#ifndef NGX_SSL_TLSv1
-#define NGX_SSL_TLSv1 0x0008
-#endif
-
-#ifndef NGX_SSL_TLSv1_1
-#define NGX_SSL_TLSv1_1 0x0010
-#endif
-
-#ifndef NGX_SSL_TLSv1_2
-#define NGX_SSL_TLSv1_2 0x0020
-#endif
-
-#ifndef NGX_SSL_TLSv1_3
-#define NGX_SSL_TLSv1_3 0x0040
-#endif
 #endif
 
 
@@ -87,10 +71,7 @@ template <class PeersT, class PeerT> class ngx_dynamic_healthcheck_https :
     static ngx_uint_t
     default_protocols()
     {
-        return NGX_SSL_TLSv1
-             | NGX_SSL_TLSv1_1
-             | NGX_SSL_TLSv1_2
-             | NGX_SSL_TLSv1_3;
+        return NGX_SSL_DEFAULT_PROTOCOLS;
     }
 
     static void
