@@ -5,7 +5,7 @@ ngx-dynamic-healthcheck - Nginx upstreams healthchecks.
 
 Module requires [zone](https://nginx.org/en/docs/http/ngx_http_upstream_module.html#zone) upstream directive.
 
-* support http, tcp, ssl checks.
+* support http, https, tcp, ssl checks.
 * support dynamic reconfiguration
 * support persistance of healthcheck parameters
 * optionally support LUA API for reconfiguration
@@ -144,7 +144,7 @@ http {
 
       server balancer.domain.net:9000 down;
 
-      check fall=2 rise=2 interval=10 timeout=10000 type=http;
+      check fall=2 rise=2 interval=10 timeout=10000 type=https;
       check_request_uri GET /health;
       check_request_body ping;
       check_response_body .*;
@@ -196,7 +196,7 @@ Individual upstream parameters
 
 check
 -----
-* **syntax**: `check fall=2 rise=2 timeout=1000 interval=10 keepalive=10 type=http|tcp|ssl port=<other check port> <passive>`
+* **syntax**: `check fall=2 rise=2 timeout=1000 interval=10 keepalive=10 type=http|https|tcp|ssl port=<other check port> <passive>`
 * **default**: `none`
 * **context**: `upstream`
 

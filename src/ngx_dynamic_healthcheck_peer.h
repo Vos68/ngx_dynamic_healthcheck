@@ -66,9 +66,6 @@ private:
     abort();
 
     void
-    fail(ngx_flag_t skip = 0);
-
-    void
     success();
 
     ngx_int_t
@@ -87,6 +84,15 @@ private:
     completed();
 
 protected:
+
+    void
+    fail(ngx_flag_t skip = 0);
+
+    void
+    begin_write(ngx_connection_t *c);
+
+    virtual ngx_int_t
+    on_connected(ngx_connection_t *c);
 
     virtual void
     up() = 0;
@@ -222,4 +228,3 @@ ngx_int_t
 ngx_dynamic_healthcheck_match_buffer(ngx_str_t *pattern, ngx_str_t *s);
 
 #endif /* NGX_DYNAMIC_HEALTHCHECK_PEER_H */
-

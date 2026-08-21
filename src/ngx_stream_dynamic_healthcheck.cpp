@@ -352,7 +352,7 @@ ngx_stream_dynamic_healthcheck_init_srv_conf(ngx_conf_t *cf,
         main_conf->config.persistent);
 
     if (conf->config.type.data != NULL
-        && ngx_strncmp(conf->config.type.data, "http", 4) == 0)
+        && ngx_dynamic_healthcheck_type_is_http(&conf->config.type))
         if (conf->config.request_uri.len == 0) {
             ngx_str_null(&conf->config.request_method);
             ngx_memzero(&conf->config.request_headers,

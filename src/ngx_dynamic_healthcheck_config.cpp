@@ -42,6 +42,7 @@ ngx_dynamic_healthcheck_check(ngx_conf_t *cf, ngx_command_t *cmd,
             type.len = arg.len - 5;
 
             if (ngx_strncmp("http", type.data, type.len) != 0
+                && ngx_strncmp("https", type.data, type.len) != 0
                 && ngx_strncmp("tcp", type.data, type.len) != 0
                 && ngx_strncmp("ssl", type.data, type.len) != 0)
                 goto fail;

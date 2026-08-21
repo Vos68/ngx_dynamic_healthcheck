@@ -103,6 +103,32 @@ ngx_dynamic_healthcheck_peer::handle_io(ngx_event_t *ev)
 }
 
 
+ngx_int_t
+ngx_dynamic_healthcheck_peer::on_connected(ngx_connection_t *c)
+{
+    return NGX_OK;
+}
+
+
+void
+ngx_dynamic_healthcheck_peer::begin_write(ngx_connection_t *c)
+{
+    if (c->read->timer_set)
+        ngx_del_timer(c->read);
+
+    if (c->write->timer_set)
+        ngx_del_timer(c->write);
+
+    check_state = st_connected;
+
+    c->read->handler = &ngx_dynamic_healthcheck_peer::handle_dummy;
+    c->write->handler = &ngx_dynamic_healthcheck_peer::handle_write;
+
+    ngx_add_timer(c->write, opts->timeout);
+    ngx_dynamic_healthcheck_peer::handle_write(c->write);
+}
+
+
 void
 ngx_dynamic_healthcheck_peer::abort()
 {
@@ -221,13 +247,16 @@ ngx_dynamic_healthcheck_peer::handle_connect(ngx_event_t *ev)
     if (peer->handle_io(ev) == NGX_ERROR)
         return peer->fail();
 
-    peer->check_state = st_connected;
+    rc = peer->on_connected(c);
+    if (rc == NGX_OK) {
+        peer->begin_write(c);
+        return;
+    }
 
-    c->read->handler = &ngx_dynamic_healthcheck_peer::handle_dummy;
-    c->write->handler = &ngx_dynamic_healthcheck_peer::handle_write;
+    if (rc == NGX_AGAIN)
+        return;
 
-    ngx_add_timer(c->write, peer->opts->timeout);
-    ngx_dynamic_healthcheck_peer::handle_write(c->write);
+    peer->fail();
 }
 
 
@@ -555,11 +584,16 @@ connected:
             this->fail();
             return;
         }
-        check_state = st_connected;
-        c->write->handler = &ngx_dynamic_healthcheck_peer::handle_write;
-        c->read->handler = &ngx_dynamic_healthcheck_peer::handle_dummy;
-        ngx_add_timer(c->write, opts->timeout);
-        ngx_dynamic_healthcheck_peer::handle_write(c->write);
+        rc = on_connected(c);
+        if (rc == NGX_OK) {
+            begin_write(c);
+            return;
+        }
+
+        if (rc == NGX_AGAIN)
+            return;
+
+        fail();
         return;
     }
 

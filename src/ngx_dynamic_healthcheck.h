@@ -144,6 +144,13 @@ ngx_stopping()
     return ngx_exiting || ngx_terminate || ngx_quit;
 }
 
+ngx_inline ngx_flag_t
+ngx_dynamic_healthcheck_type_is_http(ngx_str_t *type)
+{
+    return (type->len == 4 && ngx_memcmp(type->data, "http", 4) == 0)
+        || (type->len == 5 && ngx_memcmp(type->data, "https", 5) == 0);
+}
+
 #ifdef __cplusplus
 
 class scoped_slab_lock {
