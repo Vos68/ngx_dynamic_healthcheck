@@ -12,6 +12,22 @@
 extern "C" {
 #include <ngx_event_openssl.h>
 }
+
+#ifndef NGX_SSL_TLSv1
+#define NGX_SSL_TLSv1 0x0008
+#endif
+
+#ifndef NGX_SSL_TLSv1_1
+#define NGX_SSL_TLSv1_1 0x0010
+#endif
+
+#ifndef NGX_SSL_TLSv1_2
+#define NGX_SSL_TLSv1_2 0x0020
+#endif
+
+#ifndef NGX_SSL_TLSv1_3
+#define NGX_SSL_TLSv1_3 0x0040
+#endif
 #endif
 
 
@@ -22,25 +38,59 @@ template <class PeersT, class PeerT> class ngx_dynamic_healthcheck_https :
     ngx_ssl_t    ssl;
     ngx_flag_t   ssl_ready;
 
+    ngx_str_t
+    sni_name(ngx_connection_t *c)
+    {
+        ngx_str_t       host, sni;
+        ngx_uint_t      i;
+        ngx_keyval_t   *headers;
+        u_char         *p;
+
+        ngx_str_null(&host);
+        ngx_str_null(&sni);
+
+        headers = this->shared->request_headers.data;
+        for (i = 0; i < this->shared->request_headers.len; i++) {
+            if (headers[i].key.len == 4
+                && ngx_strncasecmp(headers[i].key.data,
+                                   (u_char *) "Host", 4) == 0)
+            {
+                host = headers[i].value;
+                break;
+            }
+        }
+
+        if (host.len == 0)
+            return host;
+
+        sni = host;
+        p = ngx_strlchr(host.data, host.data + host.len, ':');
+        if (p != NULL)
+            sni.len = p - host.data;
+
+        if (sni.len == 0)
+            return sni;
+
+        p = (u_char *) ngx_pnalloc(c->pool, sni.len + 1);
+        if (p == NULL) {
+            ngx_str_null(&sni);
+            return sni;
+        }
+
+        ngx_memcpy(p, sni.data, sni.len);
+        p[sni.len] = '\0';
+        sni.data = p;
+
+        return sni;
+    }
+
     static ngx_uint_t
     default_protocols()
     {
-        ngx_uint_t  protocols = 0;
-
-#ifdef NGX_SSL_TLSv1
-        protocols |= NGX_SSL_TLSv1;
-#endif
-#ifdef NGX_SSL_TLSv1_1
-        protocols |= NGX_SSL_TLSv1_1;
-#endif
-#ifdef NGX_SSL_TLSv1_2
-        protocols |= NGX_SSL_TLSv1_2;
-#endif
-#ifdef NGX_SSL_TLSv1_3
-        protocols |= NGX_SSL_TLSv1_3;
-#endif
-
-        return protocols;
+        return NGX_SSL_TLSv1
+             | NGX_SSL_TLSv1_1
+             | NGX_SSL_TLSv1_2
+             | NGX_SSL_TLSv1_3;
     }
 
     static void
@@ -63,6 +113,7 @@ protected:
     {
 #if (NGX_SSL)
         ngx_int_t  rc;
+        ngx_str_t  sni;
 
         if (c->ssl != NULL && c->ssl->handshaked)
             return NGX_OK;
@@ -74,6 +125,16 @@ protected:
                                       NGX_SSL_BUFFER | NGX_SSL_CLIENT)
                 != NGX_OK)
             return NGX_ERROR;
+
+        sni = sni_name(c);
+#ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
+        if (sni.len != 0
+            && SSL_set_tlsext_host_name(c->ssl->connection,
+                                        (char *) sni.data) == 0)
+        {
+            return NGX_ERROR;
+        }
+#endif
 
         ngx_reusable_connection(c, 0);
 
