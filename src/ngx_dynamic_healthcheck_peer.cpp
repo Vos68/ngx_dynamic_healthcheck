@@ -215,6 +215,7 @@ ngx_dynamic_healthcheck_peer::handle_connect(ngx_event_t *ev)
     ngx_connection_t             *c = (ngx_connection_t *) ev->data;
     ngx_dynamic_healthcheck_peer *peer =
         (ngx_dynamic_healthcheck_peer *) c->data;
+    ngx_int_t                     rc;
 
     c->log->action = (char *) "connecting";
 
