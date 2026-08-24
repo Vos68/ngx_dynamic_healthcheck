@@ -61,6 +61,7 @@ ngx_dynamic_healthcheck_create_local(ngx_str_t *server, ngx_str_t *name,
         goto nomem;
 
     n->pool = pool;
+    n->conn_pool = NULL;
 
     n->server.data = ngx_pcalloc(pool, server->len);
     if (n->server.data == NULL)
@@ -135,6 +136,11 @@ ngx_dynamic_healthcheck_state_get(ngx_dynamic_hc_state_t *state,
         if (n.local != NULL) {
 
             if (n.local->pc.connection == NULL) {
+
+                if (n.local->conn_pool != NULL) {
+                    ngx_destroy_pool(n.local->conn_pool);
+                    n.local->conn_pool = NULL;
+                }
 
                 ngx_rbtree_delete(local, (ngx_rbtree_node_t *) n.local);
 
@@ -212,6 +218,12 @@ done:
         ngx_slab_free_locked(slab, n.shared);
 
         if (n.local != NULL)
+            if (n.local->conn_pool != NULL) {
+                ngx_destroy_pool(n.local->conn_pool);
+                n.local->conn_pool = NULL;
+            }
+
+        if (n.local != NULL)
             ngx_destroy_pool(n.local->pool);
 
         n.shared = NULL;
@@ -235,6 +247,11 @@ ngx_dynamic_healthcheck_state_delete(ngx_dynamic_hc_state_node_t state)
     ngx_shmtx_lock(&slab->mutex);
 
     if (state.local != NULL) {
+
+        if (state.local->conn_pool != NULL) {
+            ngx_destroy_pool(state.local->conn_pool);
+            state.local->conn_pool = NULL;
+        }
 
         ngx_rbtree_delete(&state.local->state->rbtree,
             (ngx_rbtree_node_t *) state.local);

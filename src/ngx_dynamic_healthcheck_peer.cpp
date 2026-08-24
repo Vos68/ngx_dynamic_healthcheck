@@ -206,6 +206,11 @@ close:
 
     ngx_close_connection(c);
     ngx_memzero(&state->pc, sizeof(ngx_peer_connection_t));
+
+    if (state->conn_pool != NULL) {
+        ngx_destroy_pool(state->conn_pool);
+        state->conn_pool = NULL;
+    }
 }
 
 
@@ -482,6 +487,11 @@ ngx_dynamic_healthcheck_peer::close()
     }
 
     ngx_memzero(&state.local->pc, sizeof(ngx_peer_connection_t));
+
+    if (state.local->conn_pool != NULL) {
+        ngx_destroy_pool(state.local->conn_pool);
+        state.local->conn_pool = NULL;
+    }
 }
 
 
@@ -561,6 +571,14 @@ ngx_dynamic_healthcheck_peer::connect()
 
     c = state.local->pc.connection;
 
+    if (state.local->conn_pool == NULL) {
+        state.local->conn_pool = ngx_create_pool(1024, ngx_cycle->log);
+        if (state.local->conn_pool == NULL) {
+            close();
+            return fail();
+        }
+    }
+
     ngx_log_debug5(NGX_LOG_DEBUG_HTTP, event->log, 0,
                    "[%V] %V: %V addr=%V, fd=%d connect()",
                    &module, &upstream, &server, &name,
@@ -568,7 +586,7 @@ ngx_dynamic_healthcheck_peer::connect()
 
 connected:
 
-    c->pool = state.local->pool;
+    c->pool = state.local->conn_pool;
     c->log = ngx_cycle->log;
     c->sendfile = 0;
     c->read->log = ngx_cycle->log;

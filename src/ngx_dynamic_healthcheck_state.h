@@ -65,6 +65,7 @@ typedef struct {
 
     ngx_peer_connection_t          pc;
     ngx_pool_t                    *pool;
+    ngx_pool_t                    *conn_pool;
     ngx_buf_t                     *buf;
 
     ngx_msec_t                     expired;
