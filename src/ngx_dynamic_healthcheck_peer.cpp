@@ -568,7 +568,7 @@ ngx_dynamic_healthcheck_peer::connect()
 
 connected:
 
-    /* Keep Nginx's per-connection pool so probe allocations die with the socket. */
+    c->pool = state.local->pool;
     c->log = ngx_cycle->log;
     c->sendfile = 0;
     c->read->log = ngx_cycle->log;

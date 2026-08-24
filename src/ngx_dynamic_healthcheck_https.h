@@ -22,8 +22,8 @@ template <class PeersT, class PeerT> class ngx_dynamic_healthcheck_https :
     ngx_ssl_t    ssl;
     ngx_flag_t   ssl_ready;
 
-    ngx_str_t
-    sni_name(ngx_connection_t *c)
+    ngx_int_t
+    set_sni_name(ngx_connection_t *c)
     {
         ngx_str_t       host, sni;
         ngx_uint_t      i;
@@ -45,7 +45,7 @@ template <class PeersT, class PeerT> class ngx_dynamic_healthcheck_https :
         }
 
         if (host.len == 0)
-            return host;
+            return NGX_OK;
 
         sni = host;
         p = ngx_strlchr(host.data, host.data + host.len, ':');
@@ -53,19 +53,24 @@ template <class PeersT, class PeerT> class ngx_dynamic_healthcheck_https :
             sni.len = p - host.data;
 
         if (sni.len == 0)
-            return sni;
+            return NGX_OK;
 
-        p = (u_char *) ngx_pnalloc(c->pool, sni.len + 1);
-        if (p == NULL) {
-            ngx_str_null(&sni);
-            return sni;
-        }
+        p = (u_char *) ngx_alloc(sni.len + 1, c->log);
+        if (p == NULL)
+            return NGX_ERROR;
 
         ngx_memcpy(p, sni.data, sni.len);
         p[sni.len] = '\0';
-        sni.data = p;
 
-        return sni;
+#ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
+        if (SSL_set_tlsext_host_name(c->ssl->connection, (char *) p) == 0) {
+            ngx_free(p);
+            return NGX_ERROR;
+        }
+#endif
+
+        ngx_free(p);
+        return NGX_OK;
     }
 
     static ngx_uint_t
@@ -94,7 +99,6 @@ protected:
     {
 #if (NGX_SSL)
         ngx_int_t  rc;
-        ngx_str_t  sni;
 
         if (c->ssl != NULL && c->ssl->handshaked)
             return NGX_OK;
@@ -107,15 +111,8 @@ protected:
                 != NGX_OK)
             return NGX_ERROR;
 
-        sni = sni_name(c);
-#ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
-        if (sni.len != 0
-            && SSL_set_tlsext_host_name(c->ssl->connection,
-                                        (char *) sni.data) == 0)
-        {
+        if (set_sni_name(c) != NGX_OK)
             return NGX_ERROR;
-        }
-#endif
 
         ngx_reusable_connection(c, 0);
 
