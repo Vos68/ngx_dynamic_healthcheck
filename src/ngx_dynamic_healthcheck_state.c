@@ -108,6 +108,43 @@ nomem:
 }
 
 
+static ngx_int_t
+ngx_dynamic_healthcheck_refresh_local(ngx_dynamic_hc_local_node_t *n,
+    struct sockaddr *sockaddr, socklen_t socklen, size_t buffer_size)
+{
+    size_t  required, available;
+
+    if (n->pc.connection != NULL)
+        return NGX_BUSY;
+
+    required = buffer_size + ngx_pagesize;
+    available = (size_t) (n->buf->end - n->buf->start);
+
+    if (socklen > n->socklen || required > available)
+        return NGX_DECLINED;
+
+    if (n->conn_pool != NULL) {
+        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                       "hc local state refresh drop conn_pool=%p state_pool=%p",
+                       n->conn_pool, n->pool);
+        ngx_destroy_pool(n->conn_pool);
+        n->conn_pool = NULL;
+    }
+
+    ngx_memzero(&n->pc, sizeof(ngx_peer_connection_t));
+    ngx_memcpy(n->sockaddr, sockaddr, socklen);
+    n->socklen = socklen;
+    n->buf->pos = n->buf->start;
+    n->buf->last = n->buf->start;
+
+    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                   "hc local state reuse: pool=%p key=%V",
+                   n->pool, &n->key.str);
+
+    return NGX_OK;
+}
+
+
 ngx_dynamic_hc_state_node_t
 ngx_dynamic_healthcheck_state_get(ngx_dynamic_hc_state_t *state,
     ngx_str_t *server, ngx_str_t *name,
@@ -139,24 +176,27 @@ ngx_dynamic_healthcheck_state_get(ngx_dynamic_hc_state_t *state,
 
         if (n.local != NULL) {
 
-            if (n.local->pc.connection == NULL) {
-
-                if (n.local->conn_pool != NULL) {
-                    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
-                                   "hc local state gc drop conn_pool=%p "
-                                   "state_pool=%p",
-                                   n.local->conn_pool, n.local->pool);
-                    ngx_destroy_pool(n.local->conn_pool);
-                    n.local->conn_pool = NULL;
-                }
-
-                ngx_rbtree_delete(local, (ngx_rbtree_node_t *) n.local);
-
-                ngx_destroy_pool(n.local->pool);
-                n.local = NULL;
-
-            } else
+            if (n.local->pc.connection != NULL)
                 goto done;
+
+            if (ngx_dynamic_healthcheck_refresh_local(n.local, sockaddr,
+                                                      socklen, buffer_size)
+                == NGX_OK)
+                goto done;
+
+            if (n.local->conn_pool != NULL) {
+                ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                               "hc local state gc drop conn_pool=%p "
+                               "state_pool=%p",
+                               n.local->conn_pool, n.local->pool);
+                ngx_destroy_pool(n.local->conn_pool);
+                n.local->conn_pool = NULL;
+            }
+
+            ngx_rbtree_delete(local, (ngx_rbtree_node_t *) n.local);
+
+            ngx_destroy_pool(n.local->pool);
+            n.local = NULL;
         }
 
         n.local = ngx_dynamic_healthcheck_create_local(server, name,
@@ -285,12 +325,14 @@ ngx_dynamic_healthcheck_state_delete(ngx_dynamic_hc_state_node_t state)
 
 
 void
-ngx_dynamic_healthcheck_state_gc(ngx_dynamic_hc_shared_t *state,
+ngx_dynamic_healthcheck_state_gc(ngx_dynamic_hc_state_t *state,
     ngx_msec_t touched)
 {
     ngx_dynamic_hc_shared_node_t  *n;
     ngx_rbtree_node_t             *node, *root, *sentinel;
-    ngx_slab_pool_t               *slab = state->slab;
+    ngx_rbtree_t                  *shared = &state->shared->rbtree;
+    ngx_rbtree_t                  *local = &state->local.rbtree;
+    ngx_slab_pool_t               *slab = state->shared->slab;
     ngx_dynamic_hc_state_node_t    del;
 
     del.local = NULL;
@@ -299,8 +341,8 @@ again:
 
     ngx_shmtx_lock(&slab->mutex);
 
-    sentinel = state->rbtree.sentinel;
-    root = state->rbtree.root;
+    sentinel = shared->sentinel;
+    root = shared->root;
 
     if (root == sentinel) {
         ngx_shmtx_unlock(&slab->mutex);
@@ -309,11 +351,13 @@ again:
 
     for (node = ngx_rbtree_min(root, sentinel);
          node;
-         node = ngx_rbtree_next(&state->rbtree, node))
+         node = ngx_rbtree_next(shared, node))
     {
         n = (ngx_dynamic_hc_shared_node_t *) node;
 
         if (n->touched < touched) {
+            del.local = (ngx_dynamic_hc_local_node_t *)
+                ngx_str_rbtree_lookup(local, &n->key.str, 0);
             ngx_shmtx_unlock(&slab->mutex);
             del.shared = n;
             ngx_dynamic_healthcheck_state_delete(del);

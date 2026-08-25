@@ -198,7 +198,7 @@ do_check_private(S *uscf, ngx_dynamic_healthcheck_event_t *event)
 
     }
 
-    ngx_dynamic_healthcheck_state_gc(&event->conf->shared->state, touched);
+    ngx_dynamic_healthcheck_state_gc(&event->conf->peers, touched);
 
 end:
 

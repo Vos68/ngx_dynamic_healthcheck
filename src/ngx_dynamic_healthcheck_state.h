@@ -104,7 +104,7 @@ ngx_dynamic_healthcheck_state_delete(ngx_dynamic_hc_state_node_t state);
 
 
 void
-ngx_dynamic_healthcheck_state_gc(ngx_dynamic_hc_shared_t *state,
+ngx_dynamic_healthcheck_state_gc(ngx_dynamic_hc_state_t *state,
     ngx_msec_t touched);
 
 void
