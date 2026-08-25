@@ -63,7 +63,7 @@ ngx_dynamic_healthcheck_create_local(ngx_str_t *server, ngx_str_t *name,
     n->pool = pool;
     n->conn_pool = NULL;
 
-    ngx_log_debug4(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+    ngx_log_debug3(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
                    "hc local state create: pool=%p key=%V addr=%p",
                    pool, name, sockaddr);
 
