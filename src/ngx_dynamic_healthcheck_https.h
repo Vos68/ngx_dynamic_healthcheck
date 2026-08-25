@@ -111,6 +111,10 @@ protected:
                 != NGX_OK)
             return NGX_ERROR;
 
+        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, c->log, 0,
+                       "hc https ssl connect: c->pool=%p ssl=%p conn=%p",
+                       c->pool, c->ssl, c);
+
         if (set_sni_name(c) != NGX_OK)
             return NGX_ERROR;
 

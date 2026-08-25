@@ -63,6 +63,10 @@ ngx_dynamic_healthcheck_create_local(ngx_str_t *server, ngx_str_t *name,
     n->pool = pool;
     n->conn_pool = NULL;
 
+    ngx_log_debug4(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                   "hc local state create: pool=%p key=%V addr=%p",
+                   pool, name, sockaddr);
+
     n->server.data = ngx_pcalloc(pool, server->len);
     if (n->server.data == NULL)
         goto nomem;
@@ -138,6 +142,10 @@ ngx_dynamic_healthcheck_state_get(ngx_dynamic_hc_state_t *state,
             if (n.local->pc.connection == NULL) {
 
                 if (n.local->conn_pool != NULL) {
+                    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                                   "hc local state gc drop conn_pool=%p "
+                                   "state_pool=%p",
+                                   n.local->conn_pool, n.local->pool);
                     ngx_destroy_pool(n.local->conn_pool);
                     n.local->conn_pool = NULL;
                 }
@@ -219,6 +227,10 @@ done:
 
         if (n.local != NULL)
             if (n.local->conn_pool != NULL) {
+                ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                               "hc local state nomem drop conn_pool=%p "
+                               "state_pool=%p",
+                               n.local->conn_pool, n.local->pool);
                 ngx_destroy_pool(n.local->conn_pool);
                 n.local->conn_pool = NULL;
             }
@@ -249,6 +261,9 @@ ngx_dynamic_healthcheck_state_delete(ngx_dynamic_hc_state_node_t state)
     if (state.local != NULL) {
 
         if (state.local->conn_pool != NULL) {
+            ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                           "hc local state delete conn_pool=%p state_pool=%p",
+                           state.local->conn_pool, state.local->pool);
             ngx_destroy_pool(state.local->conn_pool);
             state.local->conn_pool = NULL;
         }

@@ -204,10 +204,18 @@ ngx_dynamic_healthcheck_peer::handle_idle(ngx_event_t *ev)
 
 close:
 
+    ngx_log_debug7(NGX_LOG_DEBUG_HTTP, c->log, 0,
+                   "[%V] %V: %V addr=%V, fd=%d idle close "
+                   "c->pool=%p conn_pool=%p",
+                   &state->module, &state->upstream,
+                   &state->server, &state->name, c->fd,
+                   c->pool, state->conn_pool);
     ngx_close_connection(c);
     ngx_memzero(&state->pc, sizeof(ngx_peer_connection_t));
 
     if (state->conn_pool != NULL) {
+        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, c->log, 0,
+                       "hc destroy idle conn_pool=%p", state->conn_pool);
         ngx_destroy_pool(state->conn_pool);
         state->conn_pool = NULL;
     }
@@ -480,15 +488,19 @@ ngx_dynamic_healthcheck_peer::close()
     ngx_connection_t  *c = state.local->pc.connection;
 
     if (c != NULL) {
-        ngx_log_debug5(NGX_LOG_DEBUG_HTTP, c->log, 0,
-                       "[%V] %V: %V addr=%V, fd=%d close()",
-                       &module, &upstream, &server, &name, c->fd);
+        ngx_log_debug7(NGX_LOG_DEBUG_HTTP, c->log, 0,
+                       "[%V] %V: %V addr=%V, fd=%d close() "
+                       "c->pool=%p conn_pool=%p",
+                       &module, &upstream, &server, &name, c->fd,
+                       c->pool, state.local->conn_pool);
         ngx_close_connection(c);
     }
 
     ngx_memzero(&state.local->pc, sizeof(ngx_peer_connection_t));
 
     if (state.local->conn_pool != NULL) {
+        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ngx_cycle->log, 0,
+                       "hc destroy conn_pool=%p", state.local->conn_pool);
         ngx_destroy_pool(state.local->conn_pool);
         state.local->conn_pool = NULL;
     }
@@ -577,6 +589,10 @@ ngx_dynamic_healthcheck_peer::connect()
             close();
             return fail();
         }
+
+        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, event->log, 0,
+                       "hc create conn_pool=%p state_pool=%p",
+                       state.local->conn_pool, state.local->pool);
     }
 
     ngx_log_debug5(NGX_LOG_DEBUG_HTTP, event->log, 0,
@@ -587,6 +603,11 @@ ngx_dynamic_healthcheck_peer::connect()
 connected:
 
     c->pool = state.local->conn_pool;
+    ngx_log_debug7(NGX_LOG_DEBUG_HTTP, event->log, 0,
+                   "[%V] %V: %V addr=%V, fd=%d bind "
+                   "c->pool=%p state_pool=%p",
+                   &module, &upstream, &server, &name, c->fd,
+                   c->pool, state.local->pool);
     c->log = ngx_cycle->log;
     c->sendfile = 0;
     c->read->log = ngx_cycle->log;
