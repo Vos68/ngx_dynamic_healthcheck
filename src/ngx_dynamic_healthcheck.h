@@ -14,6 +14,9 @@ extern "C" {
 #include <ngx_event.h>
 #include <ngx_http.h>
 #include <ngx_stream.h>
+#if (NGX_SSL)
+#include <ngx_event_openssl.h>
+#endif
 
 #ifdef __cplusplus
 }
@@ -111,6 +114,11 @@ struct ngx_dynamic_healthcheck_conf_s {
     ngx_event_t                      event;
     ngx_shm_zone_t                  *zone;
     ngx_shm_zone_post_init_pt        post_init;
+#if (NGX_SSL)
+    ngx_ssl_t                        ssl;
+    ngx_flag_t                       ssl_ready;
+    ngx_flag_t                       ssl_initialized;
+#endif
     void                            *uscf;
 };
 typedef struct ngx_dynamic_healthcheck_conf_s ngx_dynamic_healthcheck_conf_t;

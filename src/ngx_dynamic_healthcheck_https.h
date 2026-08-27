@@ -11,6 +11,7 @@
 #if (NGX_SSL)
 extern "C" {
 #include <ngx_event_openssl.h>
+#include <ngx_palloc.h>
 }
 #endif
 
@@ -19,8 +20,50 @@ template <class PeersT, class PeerT> class ngx_dynamic_healthcheck_https :
     public ngx_dynamic_healthcheck_http<PeersT, PeerT>
 {
 #if (NGX_SSL)
-    ngx_ssl_t    ssl;
-    ngx_flag_t   ssl_ready;
+    static void
+    cleanup_ssl(void *data)
+    {
+        ngx_dynamic_healthcheck_conf_t *conf =
+            (ngx_dynamic_healthcheck_conf_t *) data;
+
+        if (conf->ssl.ctx != NULL)
+            ngx_ssl_cleanup_ctx(&conf->ssl);
+
+        ngx_memzero(&conf->ssl, sizeof(ngx_ssl_t));
+        conf->ssl_ready = 0;
+        conf->ssl_initialized = 0;
+    }
+
+    ngx_int_t
+    ensure_ssl()
+    {
+        ngx_pool_cleanup_t *cleanup;
+
+        if (this->event->conf->ssl_initialized)
+            return this->event->conf->ssl_ready ? NGX_OK : NGX_ERROR;
+
+        ngx_memzero(&this->event->conf->ssl, sizeof(ngx_ssl_t));
+        this->event->conf->ssl.log = ngx_cycle->log;
+
+        if (ngx_ssl_create(&this->event->conf->ssl, default_protocols(), NULL)
+            != NGX_OK)
+            return NGX_ERROR;
+
+        cleanup = ngx_pool_cleanup_add(ngx_cycle->pool, 0);
+        if (cleanup == NULL) {
+            ngx_ssl_cleanup_ctx(&this->event->conf->ssl);
+            ngx_memzero(&this->event->conf->ssl, sizeof(ngx_ssl_t));
+            return NGX_ERROR;
+        }
+
+        cleanup->handler = cleanup_ssl;
+        cleanup->data = this->event->conf;
+
+        this->event->conf->ssl_ready = 1;
+        this->event->conf->ssl_initialized = 1;
+
+        return NGX_OK;
+    }
 
     ngx_int_t
     set_sni_name(ngx_connection_t *c)
@@ -103,10 +146,10 @@ protected:
         if (c->ssl != NULL && c->ssl->handshaked)
             return NGX_OK;
 
-        if (!ssl_ready)
+        if (ensure_ssl() != NGX_OK)
             return NGX_ERROR;
 
-        if (ngx_ssl_create_connection(&ssl, c,
+        if (ngx_ssl_create_connection(&this->event->conf->ssl, c,
                                       NGX_SSL_BUFFER | NGX_SSL_CLIENT)
                 != NGX_OK)
             return NGX_ERROR;
@@ -137,26 +180,10 @@ public:
     ngx_dynamic_healthcheck_https(PeersT *peers,
         ngx_dynamic_healthcheck_event_t *event, ngx_dynamic_hc_state_node_t s)
         : ngx_dynamic_healthcheck_http<PeersT, PeerT>(peers, event, s)
-#if (NGX_SSL)
-        , ssl_ready(0)
-#endif
     {
-#if (NGX_SSL)
-        ngx_memzero(&ssl, sizeof(ngx_ssl_t));
-        ssl.log = ngx_cycle->log;
-
-        if (ngx_ssl_create(&ssl, default_protocols(), NULL) == NGX_OK)
-            ssl_ready = 1;
-#endif
     }
 
-    virtual ~ngx_dynamic_healthcheck_https()
-    {
-#if (NGX_SSL)
-        if (ssl.ctx != NULL)
-            ngx_ssl_cleanup_ctx(&ssl);
-#endif
-    }
+    virtual ~ngx_dynamic_healthcheck_https() {}
 };
 
 
