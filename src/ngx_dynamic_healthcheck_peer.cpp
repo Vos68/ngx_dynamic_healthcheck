@@ -14,6 +14,38 @@ current_msec()
 }
 
 
+static void
+close_connection(ngx_connection_t *c)
+{
+    ngx_pool_t  *pool;
+
+#if (NGX_SSL)
+    if (c->ssl != NULL) {
+        /*
+         * ngx_close_connection() does not release SSL state.  Keep the
+         * connection pool alive if nginx needs another event-loop turn to
+         * finish the quiet TLS shutdown.
+         */
+        c->ssl->no_wait_shutdown = 1;
+        c->ssl->no_send_shutdown = 1;
+
+        if (ngx_ssl_shutdown(c) == NGX_AGAIN) {
+            c->ssl->handler = close_connection;
+            return;
+        }
+    }
+#endif
+
+    pool = c->pool;
+    c->pool = NULL;
+
+    if (pool != NULL)
+        ngx_destroy_pool(pool);
+
+    ngx_close_connection(c);
+}
+
+
 static ngx_int_t
 test_connect(ngx_connection_t *c)
 {
@@ -210,15 +242,9 @@ close:
                    &state->module, &state->upstream,
                    &state->server, &state->name, c->fd,
                    c->pool, state->conn_pool);
-    ngx_close_connection(c);
+    state->conn_pool = NULL;
+    close_connection(c);
     ngx_memzero(&state->pc, sizeof(ngx_peer_connection_t));
-
-    if (state->conn_pool != NULL) {
-        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, c->log, 0,
-                       "hc destroy idle conn_pool=%p", state->conn_pool);
-        ngx_destroy_pool(state->conn_pool);
-        state->conn_pool = NULL;
-    }
 }
 
 
@@ -493,7 +519,8 @@ ngx_dynamic_healthcheck_peer::close()
                        "c->pool=%p conn_pool=%p",
                        &module, &upstream, &server, &name, c->fd,
                        c->pool, state.local->conn_pool);
-        ngx_close_connection(c);
+        state.local->conn_pool = NULL;
+        close_connection(c);
     }
 
     ngx_memzero(&state.local->pc, sizeof(ngx_peer_connection_t));
